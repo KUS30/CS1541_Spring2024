@@ -34,10 +34,12 @@ void mm_cpu(float* C, const float* A, const float* B, int n) {
 /////////////////////////////////////////////////////////////////////////
 __global__ void mm_gpu(float* C, float* A, float* B, int n)
 {
-	// TODO:
-	// Implement the naive GPU matrix multiplication shown on the lecture slides.
-	// Remove the printf below when you don't need it.  It's just for demonstration.
-	printf("Grid(%d, %d) Block (%d, %d)\n", blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
+	float Cvalue = 0;
+	int i = blockIdx.y * blockDim.y + threadIdx.y;
+	int j = blockIdx.x * blockDim.x + threadIdx.x;
+	for (int k = 0; k < n; ++k)
+		Cvalue += A[i * n + k] * B[k * n + j];
+	C[i * n + j] = Cvalue;
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -94,9 +96,16 @@ void copy_host_to_device(float* A, float* B, int n)
 	time_start = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
 
 	// TODO:
-	// 1. Allocate GPU memory for d_A, d_B, d_C using cudaMalloc.
+	int nBytes = n * n * sizeof(float); // Calculate total size in bytes
+	// 1. Allocate GPU memory for d_A, d_B, d_C using cudaMalloc
+	cudaMalloc((void**)&d_A, nBytes);
+	cudaMalloc((void**)&d_B, nBytes);
+	cudaMalloc((void**)&d_C, nBytes);
 	// 2. Copy input arrays A, B to d_A, d_B using cudaMemcpy.
+	cudaMemcpy(d_A, A, nBytes, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_B, B, nBytes, cudaMemcpyHostToDevice);
 	// 3. Call cudaMemset on array d_C to initialize all elements to 0.
+	cudaMemset(d_C, 0, nBytes);
 
 	gettimeofday (&tv ,   &tz);
 	time_end = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
@@ -117,8 +126,13 @@ void copy_device_to_host(float* C, int n)
 	time_start = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
 
 	// TODO:
+	int nBytes = n * n * sizeof(float); // Calculate total size in bytes
 	// 1. Copy result array d_C to C using cudaMemcpy.
+	cudaMemcpy(d_C, c, nBytes, cudaMemcpyDeviceToHost);
 	// 2. Free memory allocated for d_A, d_B, d_C using cudaFree.
+	cudaFree(d_A);
+	cudaFree(d_B);
+	cudaFree(d_C);
 
 	gettimeofday (&tv ,   &tz);
 	time_end = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
@@ -183,6 +197,7 @@ int main(int argc, char** argv)
 
 		// TODO: Call the kernel
 		// Call mm_gpu <<< >>> ( ) with the appropriate grid and thread block layouts.
+		mm_gpu(d_C, d_A, d_B, N);
 
 		gpuErrchk( cudaPeekAtLastError() );
 		gpuErrchk( cudaDeviceSynchronize() );
